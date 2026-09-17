@@ -178,9 +178,10 @@ const WAVES = [
   { count: 10, travel: 23, spawn: 8.5,  alive: 5, mix: [0.34, 0.41, 0.25] },
   { count: 10, travel: 22, spawn: 9.0,  alive: 5, mix: [0.29, 0.41, 0.30] },
   { count: 11, travel: 22, spawn: 9.5,  alive: 5, mix: [0.24, 0.41, 0.35] },
-  { count: 11, travel: 21, spawn: 10.0, alive: 5, mix: [0.20, 0.41, 0.39] },
-  { count: 12, travel: 21, spawn: 10.0, alive: 5, mix: [0.17, 0.40, 0.43] },
 ];
+
+/* 一共就这么些波，打完最后一波＝通关（不再是「迟早会输」的无限模式） */
+const TOTAL_WAVES = WAVES.length;
 
 const REST_SECONDS = 8;    // 波与波之间的喘息时间
 const COMBO_STEP   = 5;    // 连对多少题给一次小奖励
@@ -275,6 +276,7 @@ const sfx = {
   miss()  { tone(150, 0.07, 'sine', 0.06); },
   click() { tone(660, 0.04, 'square', 0.035); },
   wave()  { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.16, 'triangle', 0.09), i * 90)); },
+  win()   { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => setTimeout(() => tone(f, 0.24, 'triangle', 0.10), i * 115)); },
   over()  { [440, 349, 294, 196].forEach((f, i) => setTimeout(() => tone(f, 0.36, 'triangle', 0.11), i * 180)); },
 };
 
@@ -301,12 +303,16 @@ function rawProblem(tier) {
   const a = randInt(2, 9), b = randInt(2, 9);    // 九九乘法
   return { text: a + ' × ' + b + ' = ?', answer: a * b };
 }
+/* 第 EASY_MAX_WAVE 波之后，最入门的一档（20 以内加减）不再出现。
+   小毛毛虫照样爬来（体型、血量不变），但头顶的题换成 100 以内加减。 */
+const EASY_MAX_WAVE = 5;
 function newProblem(tier, taken) {
+  const t = (wave > EASY_MAX_WAVE && tier === 0) ? 1 : tier;
   for (let i = 0; i < 40; i++) {
-    const p = rawProblem(tier), s = String(p.answer);
+    const p = rawProblem(t), s = String(p.answer);
     if (!taken.some(a => String(a).startsWith(s) || s.startsWith(String(a)))) return p;
   }
-  return rawProblem(tier);
+  return rawProblem(t);
 }
 
 /* ---------- 树枝路径（等弧长重采样，保证爬行速度均匀） ---------- */
@@ -374,16 +380,7 @@ let aimAngle = -Math.PI / 3, recoil = 0, appleShake = 0, comboTip = 0, timeAlive
 try { best = parseInt(localStorage.getItem('appleDefense.best') || '0', 10) || 0; } catch (e) { best = 0; }
 
 function cfgForWave(w) {
-  if (w <= WAVES.length) return WAVES[w - 1];
-  // 超出表格后继续缓慢加压，直到一个「熟练玩家迟早会输」的极限
-  const last = WAVES[WAVES.length - 1], k = w - WAVES.length;
-  return {
-    count: last.count + k,
-    travel: Math.max(15, last.travel - k * 0.7),
-    spawn: Math.max(8.0, last.spawn - k * 0.3),
-    alive: 5,
-    mix: last.mix,
-  };
+  return WAVES[Math.min(w, TOTAL_WAVES) - 1];
 }
 function rollTier(mix) {
   const r = Math.random();
@@ -491,14 +488,28 @@ function nextWave() {
   state = 'playing';
 }
 function finishWave() {
-  state = 'rest';
-  restTimer = REST_SECONDS;
   const bonus = WAVE_BONUS * wave;
   score += bonus;
   const before = APPLE.hp;
   APPLE.hp = Math.min(APPLE.maxHp, APPLE.hp + APPLE.healPerWave);
+  if (wave >= TOTAL_WAVES) { win(); return; }      // 打完最后一波＝通关
+  state = 'rest';
+  restTimer = REST_SECONDS;
   restInfo = { bonus, healed: Math.round(APPLE.hp - before) };
   sfx.wave();
+}
+function win() {
+  state = 'win';
+  syncBars();
+  sfx.win();
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem('appleDefense.best', String(best)); } catch (e) {}
+  }
+  for (let i = 0; i < 5; i++) {                    // 从空中撒几把彩屑
+    burst(rand(140, W - 140), rand(150, 400), 26,
+          ['#FFD54F', '#FFB300', '#FFF8E1', '#A5D66A', '#81D4FA'], 460, 1.7, 10, 480);
+  }
 }
 function gameOver() {
   state = 'over';
@@ -1324,7 +1335,7 @@ function drawHUD() {
 
   ctx.font = 'bold 16px ' + FONT;
   ctx.fillStyle = '#37474F';
-  ctx.fillText('第 ' + wave + ' 波', 196, 48);
+  ctx.fillText('第 ' + wave + ' / ' + TOTAL_WAVES + ' 波', 196, 48);
 
   ctx.font = 'bold 17px ' + FONT;
   ctx.fillStyle = combo >= 2 ? (comboTip > 0 ? '#FF6F00' : '#558B2F') : '#90A4AE';
@@ -1487,11 +1498,51 @@ function drawOver() {
   ctx.textBaseline = 'alphabetic';
 }
 
+function drawWin() {
+  ctx.fillStyle = 'rgba(18,40,14,.45)';
+  ctx.fillRect(0, 0, W, H);
+
+  const pw = 620, ph = 386, px = (W - pw) / 2, py = 124;
+  drawPanel(px, py, pw, ph);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 44px ' + FONT;
+  ctx.fillStyle = '#FFB300';
+  ctx.fillText('🎉 恭喜通关！', W / 2, py + 70);
+
+  ctx.font = 'bold 24px ' + FONT;
+  ctx.fillStyle = '#ECEFF1';
+  ctx.fillText('苹果守住了 —— 打退全部 ' + TOTAL_WAVES + ' 波毛毛虫', W / 2, py + 134);
+
+  ctx.font = 'bold 54px ' + FONT;
+  ctx.fillStyle = '#A5D66A';
+  ctx.fillText(String(score), W / 2, py + 202);
+  ctx.font = '17px ' + FONT;
+  ctx.fillStyle = '#B0BEC5';
+  ctx.fillText('本次得分', W / 2, py + 240);
+
+  ctx.font = 'bold 19px ' + FONT;
+  ctx.fillStyle = '#B3E5FC';
+  ctx.fillText('最高连对 ' + maxCombo + '    历史最高分 ' + best, W / 2, py + 280);
+
+  const pulse = 0.6 + 0.4 * Math.sin(timeAlive * 4);
+  ctx.globalAlpha = pulse;
+  ctx.font = 'bold 24px ' + FONT;
+  ctx.fillStyle = '#FFD54F';
+  ctx.fillText(PAD_ON ? '点下面的按钮 看记录 或 再来一局'
+                      : '按 R 查看答题记录　按 Enter 再来一局', W / 2, py + 338);
+  ctx.globalAlpha = 1;
+  ctx.textBaseline = 'alphabetic';
+}
+
 /* ---------- 结算后的答题记录面板 ---------- */
 let reviewOpen = false, reviewFilter = 'all';
 
+function ended() { return state === 'over' || state === 'win'; }
+
 function syncBars() {
-  const over = state === 'over';
+  const over = ended();
   actionsEl.classList.toggle('hidden', !over);
   padEl.style.display = (PAD_ON && !over) ? '' : 'none';
   if (!over) closeReview();
@@ -1633,7 +1684,12 @@ function render() {
   drawBullets();
   drawParticles();
   if (state === 'menu') drawMenu();
-  else { drawHUD(); if (state === 'rest') drawRest(); if (state === 'over') drawOver(); }
+  else {
+    drawHUD();
+    if (state === 'rest') drawRest();
+    if (state === 'over') drawOver();
+    if (state === 'win') drawWin();
+  }
 }
 
 /* ---------- 主循环 ---------- */
@@ -1655,9 +1711,9 @@ window.addEventListener('keydown', e => {
     }
     return;
   }
-  if ((e.key === 'r' || e.key === 'R') && state === 'over') { openReview(); e.preventDefault(); return; }
+  if ((e.key === 'r' || e.key === 'R') && ended()) { openReview(); e.preventDefault(); return; }
   if (e.key === 'Enter' || e.key === ' ') {
-    if (state === 'menu' || state === 'over') {
+    if (state === 'menu' || ended()) {
       audio();
       startGame();
       e.preventDefault();
@@ -1671,7 +1727,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('pointerdown', () => {
   if (reviewOpen) return;
   audio();
-  if (state === 'menu' || state === 'over') startGame();
+  if (state === 'menu' || ended()) startGame();
 });
 
 /* ---------- 屏幕数字键盘（手机 / 触屏） ---------- */
@@ -1681,7 +1737,7 @@ padEl.addEventListener('pointerdown', e => {
   if (!btn) return;
   e.preventDefault();
   audio();
-  if (state === 'menu' || state === 'over') { startGame(); return; }   // 手机上没有 Enter，点数字即开局
+  if (state === 'menu' || ended()) { startGame(); return; }   // 手机上没有 Enter，点数字即开局
   if (state !== 'playing' && state !== 'rest') return;
   const k = btn.dataset.k;
   if (k === 'del') { input = input.slice(0, -1); sfx.click(); }
