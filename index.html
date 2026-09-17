@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>🍎 苹果保卫战</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%; overflow: hidden; background: #10202f;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    touch-action: manipulation;
+  }
+  body { flex-direction: column; gap: 10px; padding: 8px 0; }
+  canvas { display: block; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+
+  /* 手机数字键盘：只在触屏 / 窄窗口下显示 */
+  #pad {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    width: min(560px, 94vw); flex: none;
+  }
+  #pad button {
+    height: 46px; border: 0; border-radius: 14px;
+    background: #1E3A52; color: #E3F2FD;
+    font: bold 24px/1 inherit; font-family: inherit;
+    box-shadow: 0 4px 0 #0C1E2C; cursor: pointer;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #pad button:active { transform: translateY(3px); box-shadow: 0 1px 0 #0C1E2C; background: #2C5474; }
+  #pad button.fn { background: #37474F; font-size: 20px; }
+  #pad button.wide { grid-column: span 2; }
+
+  /* 结算后的动作条（与数字键盘同一位置，二选一） */
+  #actions { display: flex; gap: 10px; width: min(560px, 94vw); flex: none; }
+  #actions.hidden { display: none; }
+  #actions button {
+    flex: 1; height: 50px; border: 0; border-radius: 14px;
+    font: bold 17px/1 inherit; font-family: inherit; cursor: pointer;
+    background: #1E3A52; color: #E3F2FD; box-shadow: 0 4px 0 #0C1E2C;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #actions button.primary { background: #2E7D32; box-shadow: 0 4px 0 #1B5E20; }
+  #actions button:active { transform: translateY(3px); box-shadow: 0 1px 0 #0C1E2C; }
+
+  /* 答题记录面板 */
+  #rev {
+    position: fixed; inset: 0; background: rgba(6,18,28,.72); z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  #rev.hidden { display: none; }
+  #rev .box {
+    background: #FFF; color: #263238; border-radius: 18px;
+    width: min(720px, 100%); max-height: 88vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,.5);
+  }
+  #rev .hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid #ECEFF1; flex: none;
+  }
+  #rev .hd b { font-size: 19px; }
+  #rev .hd span { display: flex; gap: 8px; }
+  #rev .hd button {
+    border: 0; background: #ECEFF1; color: #455A64; height: 34px; min-width: 34px; padding: 0 12px;
+    border-radius: 10px; font: bold 14px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  #rev #revClose { padding: 0; font-size: 17px; }
+  #rev .stat {
+    padding: 11px 18px; font-size: 14px; color: #546E7A; background: #F7F9FA;
+    display: flex; flex-wrap: wrap; gap: 4px 14px; flex: none;
+  }
+  #rev .stat b { color: #263238; }
+  #rev .stat .okc { color: #2E7D32; }
+  #rev .stat .noc { color: #C62828; }
+  #rev .tabs { display: flex; gap: 8px; padding: 10px 18px 4px; flex: none; }
+  #rev .tabs button {
+    border: 0; background: #ECEFF1; color: #546E7A; padding: 7px 16px; border-radius: 999px;
+    font: bold 14px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  #rev .tabs button.on { background: #2E7D32; color: #fff; }
+  #rev .list { overflow: auto; padding: 6px 18px 10px; -webkit-overflow-scrolling: touch; }
+  #rev table { width: 100%; border-collapse: collapse; }
+  #rev th {
+    text-align: left; color: #90A4AE; font-size: 12px; font-weight: bold;
+    padding: 6px; border-bottom: 1px solid #ECEFF1; position: sticky; top: 0; background: #fff;
+  }
+  #rev td {
+    padding: 7px 6px; border-bottom: 1px solid #F2F5F7; font-size: 14px;
+    font-variant-numeric: tabular-nums; color: #37474F;
+  }
+  #rev td.q { font-weight: bold; font-size: 15px; color: #263238; white-space: nowrap; }
+  #rev tr.bad td { background: #FFEBEE; }
+  #rev tr.miss td { color: #B0BEC5; }
+  #rev .ok { color: #2E7D32; font-weight: bold; }
+  #rev .no { color: #C62828; font-weight: bold; }
+  #rev .fix { color: #EF6C00; font-weight: bold; }
+  #rev .na { color: #B0BEC5; }
+  #rev .ft { padding: 12px 18px; border-top: 1px solid #ECEFF1; display: flex; gap: 10px; flex: none; }
+  #rev .ft button {
+    flex: 1; height: 46px; border: 0; border-radius: 12px; background: #2E7D32; color: #fff;
+    font: bold 16px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  #rev .ft button.ghost { background: #ECEFF1; color: #455A64; }
+  #rev .empty { padding: 34px; text-align: center; color: #90A4AE; font-size: 15px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="pad">
+  <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+  <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+  <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+  <button data-k="del" class="fn">⌫</button><button data-k="0" class="wide">0</button>
+</div>
+<div id="actions" class="hidden">
+  <button id="btnReview">📋 查看答题记录</button>
+  <button id="btnAgain" class="primary">🔄 再来一局</button>
+</div>
+<div id="rev" class="hidden">
+  <div class="box">
+    <div class="hd">
+      <b>📋 本局答题记录</b>
+      <span><button id="revCopy" title="复制成文本">复制</button><button id="revClose">✕</button></span>
+    </div>
+    <div id="revStat" class="stat"></div>
+    <div class="tabs">
+      <button data-f="all" class="on">全部题目</button>
+      <button data-f="wrong">只看错题</button>
+    </div>
+    <div id="revList" class="list"></div>
+    <div class="ft">
+      <button id="revBack" class="ghost">返回</button>
+      <button id="revAgain">🔄 再来一局</button>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════════
+   苹果保卫战 · 可调参数（想改难度，改这里就够了）
+   ══════════════════════════════════════════════════════════════════ */
+
+const W = 1024, H = 640;
+
+const APPLE = {
+  x: 512, y: 200, r: 74,
+  maxHp: 100,        // 苹果耐久总量
+  chewEvery: 5,      // 毛毛虫贴住苹果后，每 5 秒啃一口
+  healPerWave: 10,   // 每通过一波，苹果回血
+};
+
+/* 三档毛毛虫
+   hp    = 要打中几枪才爆
+   bite  = 啃一口扣多少耐久（小虫 100/5=20 口，中虫 10 口，大虫 3 口）
+   score = 打爆一只的分数                                        */
+const TIERS = [
+  { name: '小虫', hp: 1, bite: 5,       score: 10, scale: 0.80, body: '#A5D66A', head: '#7CB342' },
+  { name: '中虫', hp: 2, bite: 10,      score: 25, scale: 1.20, body: '#8BC34A', head: '#689F38' },
+  { name: '大虫', hp: 3, bite: 100 / 3, score: 50, scale: 1.70, body: '#7CB342', head: '#558B2F' },
+];
+
+/* 每一波的节奏
+   count  = 这一波总共来几只
+   travel = 从树枝末端爬到苹果要多少秒（越小＝孩子思考时间越短）
+   spawn  = 每隔多少秒放一只出来
+   alive  = 同屏最多同时存在几只
+   mix    = 三档出现的概率 [小虫, 中虫, 大虫]                        */
+const WAVES = [
+  { count: 6,  travel: 28, spawn: 6.0,  alive: 3, mix: [1.00, 0.00, 0.00] },
+  { count: 7,  travel: 27, spawn: 6.0,  alive: 3, mix: [0.88, 0.12, 0.00] },
+  { count: 7,  travel: 26, spawn: 6.5,  alive: 4, mix: [0.74, 0.26, 0.00] },
+  { count: 8,  travel: 25, spawn: 7.0,  alive: 4, mix: [0.62, 0.33, 0.05] },
+  { count: 8,  travel: 24, spawn: 7.0,  alive: 4, mix: [0.54, 0.36, 0.10] },
+  { count: 9,  travel: 24, spawn: 7.5,  alive: 4, mix: [0.46, 0.39, 0.15] },
+  { count: 9,  travel: 23, spawn: 8.0,  alive: 4, mix: [0.40, 0.40, 0.20] },
+  { count: 10, travel: 23, spawn: 8.5,  alive: 5, mix: [0.34, 0.41, 0.25] },
+  { count: 10, travel: 22, spawn: 9.0,  alive: 5, mix: [0.29, 0.41, 0.30] },
+  { count: 11, travel: 22, spawn: 9.5,  alive: 5, mix: [0.24, 0.41, 0.35] },
+  { count: 11, travel: 21, spawn: 10.0, alive: 5, mix: [0.20, 0.41, 0.39] },
+  { count: 12, travel: 21, spawn: 10.0, alive: 5, mix: [0.17, 0.40, 0.43] },
+];
+
+const REST_SECONDS = 8;    // 波与波之间的喘息时间
+const COMBO_STEP   = 5;    // 连对多少题给一次小奖励
+const COMBO_BONUS  = 20;   // 每次小奖励加多少分
+const WAVE_BONUS   = 50;   // 通过一波的奖励分 = WAVE_BONUS × 波数
+
+/* ══════════════════════════════════════════════════════════════════ */
+
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const padEl = document.getElementById('pad');
+const actionsEl = document.getElementById('actions');
+const revEl = document.getElementById('rev');
+const FONT = "'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif";
+
+/* 触屏 / 窄窗口 → 显示屏幕数字键盘（桌面想预览可加 ?pad=1） */
+const TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches)
+           || navigator.maxTouchPoints > 0
+           || location.search.indexOf('pad=1') >= 0;
+const PAD_ON = TOUCH || window.innerWidth < 820;
+if (!PAD_ON) padEl.style.display = 'none';
+
+const rand    = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+const clamp   = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+function rr(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // 给底部数字键盘 / 结算动作条留出空间，别把画面挤扁
+  const barH = (PAD_ON ? padEl.offsetHeight : 0) || actionsEl.offsetHeight || 0;
+  const padH = barH ? barH + 10 : 0;
+  const scale = Math.min(window.innerWidth / W, (window.innerHeight - padH - 16) / H);
+  cv.style.width = Math.round(W * scale) + 'px';
+  cv.style.height = Math.round(H * scale) + 'px';
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', () => { resize(); render(); });
+
+/* ---------- 音效（WebAudio 实时合成，零外部文件） ---------- */
+let actx = null, audioOK = true;
+function audio() {
+  if (!audioOK) return null;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  } catch (e) { audioOK = false; return null; }
+}
+function tone(freq, dur, type, gain, slideTo) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(a.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(dur, gain, freq, q) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime;
+  const len = Math.max(1, Math.floor(a.sampleRate * dur));
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  const g = a.createGain(); g.gain.value = gain;
+  src.connect(f).connect(g).connect(a.destination);
+  src.start(t);
+}
+const sfx = {
+  shoot() { noise(0.07, 0.10, 2400, 1.6); tone(880, 0.07, 'square', 0.05, 300); },
+  hit()   { tone(1100, 0.06, 'square', 0.07, 1600); },
+  boom()  { noise(0.30, 0.20, 420, 0.7); tone(220, 0.26, 'sawtooth', 0.08, 55); },
+  chomp() { tone(170, 0.16, 'triangle', 0.12, 80); },
+  miss()  { tone(150, 0.07, 'sine', 0.06); },
+  click() { tone(660, 0.04, 'square', 0.035); },
+  wave()  { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.16, 'triangle', 0.09), i * 90)); },
+  over()  { [440, 349, 294, 196].forEach((f, i) => setTimeout(() => tone(f, 0.36, 'triangle', 0.11), i * 180)); },
+};
+
+/* ---------- 题目生成 ---------- */
+/* 关键约束：任意两道在场题目的答案，数字串互不为「前缀」。
+   这样输入过程中绝不会出现歧义 —— 敲到哪一位都只有唯一解读。 */
+function rawProblem(tier) {
+  if (tier === 0) {                              // 20 以内加减
+    if (Math.random() < 0.5) {
+      const a = randInt(2, 10), b = randInt(2, 20 - a);
+      return { text: a + ' + ' + b + ' = ?', answer: a + b };
+    }
+    const a = randInt(8, 20), b = randInt(2, a - 2);
+    return { text: a + ' − ' + b + ' = ?', answer: a - b };
+  }
+  if (tier === 1) {                              // 100 以内加减
+    if (Math.random() < 0.5) {
+      const a = randInt(12, 88), b = randInt(3, 100 - a);
+      return { text: a + ' + ' + b + ' = ?', answer: a + b };
+    }
+    const a = randInt(25, 99), b = randInt(3, a - 5);
+    return { text: a + ' − ' + b + ' = ?', answer: a - b };
+  }
+  const a = randInt(2, 9), b = randInt(2, 9);    // 九九乘法
+  return { text: a + ' × ' + b + ' = ?', answer: a * b };
+}
+function newProblem(tier, taken) {
+  for (let i = 0; i < 40; i++) {
+    const p = rawProblem(tier), s = String(p.answer);
+    if (!taken.some(a => String(a).startsWith(s) || s.startsWith(String(a)))) return p;
+  }
+  return rawProblem(tier);
+}
+
+/* ---------- 树枝路径（等弧长重采样，保证爬行速度均匀） ---------- */
+/* 树枝末梢刻意排在树冠左右两侧的空档里（并且避开顶部 HUD），
+   这样毛毛虫刚出生时头顶的题目气泡不会被 HUD 遮住。 */
+const BRANCHES = [
+  { tip: [116, 262], ctrl: [300, 302] },
+  { tip: [106, 400], ctrl: [300, 400] },
+  { tip: [172, 514], ctrl: [322, 470] },
+  { tip: [908, 262], ctrl: [724, 302] },
+  { tip: [918, 400], ctrl: [724, 400] },
+  { tip: [852, 514], ctrl: [702, 470] },
+];
+function buildPath(b) {
+  const dx = APPLE.x - b.ctrl[0], dy = APPLE.y - b.ctrl[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const P0 = b.tip, P1 = b.ctrl;
+  const P2 = [APPLE.x - dx / len * (APPLE.r + 4), APPLE.y - dy / len * (APPLE.r + 4)];
+  const N = 120, raw = [], acc = [0];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, m = 1 - t;
+    raw.push([
+      m * m * P0[0] + 2 * m * t * P1[0] + t * t * P2[0],
+      m * m * P0[1] + 2 * m * t * P1[1] + t * t * P2[1],
+    ]);
+    if (i) acc.push(acc[i - 1] + Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]));
+  }
+  const total = acc[N], out = [];
+  let j = 0;
+  for (let i = 0; i <= N; i++) {
+    const s = total * i / N;
+    while (j < N - 1 && acc[j + 1] < s) j++;
+    const seg = acc[j + 1] - acc[j] || 1, f = (s - acc[j]) / seg;
+    out.push([
+      raw[j][0] + (raw[j + 1][0] - raw[j][0]) * f,
+      raw[j][1] + (raw[j + 1][1] - raw[j][1]) * f,
+    ]);
+  }
+  return { pts: out, raw };
+}
+const PATHS = BRANCHES.map(buildPath);
+
+function pointAt(pi, p) {
+  const pts = PATHS[pi].pts;
+  const f = clamp(p, 0, 1) * (pts.length - 1);
+  const i = Math.min(pts.length - 2, Math.floor(f)), k = f - i;
+  const j = Math.max(0, i - 2);
+  return [
+    pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k,
+    pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k,
+    Math.atan2(pts[i + 1][1] - pts[j][1], pts[i + 1][0] - pts[j][0]),
+  ];
+}
+
+/* ---------- 游戏状态 ---------- */
+let state = 'menu';           // menu | playing | rest | over
+let score = 0, best = 0, wave = 0, combo = 0, maxCombo = 0;
+let worms = [], bullets = [], particles = [], floaters = [];
+let history = [];                 // 本局每一道出现过的题（用于结算后的答题记录）
+let input = '', inputShake = 0;
+let spawnTimer = 0, spawned = 0, waveTotal = 0, waveCfg = WAVES[0];
+let restTimer = 0, restInfo = null;
+let aimAngle = -Math.PI / 3, recoil = 0, appleShake = 0, comboTip = 0, timeAlive = 0;
+
+try { best = parseInt(localStorage.getItem('appleDefense.best') || '0', 10) || 0; } catch (e) { best = 0; }
+
+function cfgForWave(w) {
+  if (w <= WAVES.length) return WAVES[w - 1];
+  // 超出表格后继续缓慢加压，直到一个「熟练玩家迟早会输」的极限
+  const last = WAVES[WAVES.length - 1], k = w - WAVES.length;
+  return {
+    count: last.count + k,
+    travel: Math.max(15, last.travel - k * 0.7),
+    spawn: Math.max(8.0, last.spawn - k * 0.3),
+    alive: 5,
+    mix: last.mix,
+  };
+}
+function rollTier(mix) {
+  const r = Math.random();
+  let acc = 0;
+  for (let i = 0; i < mix.length; i++) { acc += mix[i]; if (r < acc) return i; }
+  return mix.length - 1;
+}
+function liveAnswers(except) {
+  return worms.filter(w => !w.dead && w !== except).map(w => w.problem.answer);
+}
+function freeBranch() {
+  const used = worms.filter(w => !w.dead).map(w => w.branch);
+  const free = [];
+  for (let i = 0; i < PATHS.length; i++) if (!used.includes(i)) free.push(i);
+  return free.length ? free[randInt(0, free.length - 1)] : randInt(0, PATHS.length - 1);
+}
+function spawnWorm() {
+  const tier = rollTier(waveCfg.mix);
+  const branch = freeBranch();
+  const p = pointAt(branch, 0);
+  const w = {
+    branch, tier, progress: 0, hp: TIERS[tier].hp, maxHp: TIERS[tier].hp,
+    problem: null,
+    x: p[0], y: p[1], angle: p[2], phase: rand(0, 6.28),
+    chewing: false, chewTimer: 0, dead: false, flash: 0, pop: 0, born: 0,
+  };
+  w.problem = newProblem(tier, liveAnswers(null));
+  newRecord(w);
+  worms.push(w);
+  spawned++;
+}
+
+/* ---------- 答题记录 ----------
+   每一道题从出现到被解决为一条记录：
+   ok = true 答对 / false 答错（一直没答对）/ null 到结束都没作答
+   wrong = 中途输错的数字串                                          */
+function newRecord(w) {
+  w.rec = {
+    text: w.problem.text, answer: w.problem.answer, tier: w.tier, wave,
+    ok: null, given: '', wrong: [], tries: 0, time: 0, t0: timeAlive,
+  };
+  history.push(w.rec);
+}
+function recordCorrect(w, given) {
+  const r = w.rec;
+  r.tries++;
+  r.given = given;
+  if (r.ok === null) r.time = timeAlive - r.t0;
+  r.ok = true;
+}
+/* 输入串匹配不上任何虫时，归因到"最可能正在答的那只"：
+   已输入的前缀仍有匹配 → 取其中爬得最远的；否则取全场最紧迫的那只 */
+function blameWorm() {
+  const live = worms.filter(w => !w.dead);
+  if (!live.length) return null;
+  const near = (a, b) => b.progress - a.progress;
+  if (input) {
+    const m = live.filter(w => String(w.problem.answer).startsWith(input));
+    if (m.length) return m.sort(near)[0];
+  }
+  return live.sort(near)[0];
+}
+function recordWrong(given) {
+  const w = blameWorm();
+  if (!w) return;
+  const r = w.rec;
+  r.tries++;
+  r.wrong.push(given);
+  if (r.ok === null) { r.ok = false; r.given = given; r.time = timeAlive - r.t0; }
+}
+
+/* ---------- 粒子 / 飘字 ---------- */
+function burst(x, y, n, colors, spd, life, size, grav) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2), v = rand(spd * 0.25, spd);
+    particles.push({
+      x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - spd * 0.15,
+      life: rand(life * 0.5, life), max: life,
+      color: colors[randInt(0, colors.length - 1)],
+      size: rand(size * 0.6, size), grav: grav === undefined ? 320 : grav,
+    });
+  }
+}
+function floatText(x, y, text, color) {
+  floaters.push({ x, y, text, color, life: 1.1, max: 1.1 });
+}
+
+/* ---------- 流程 ---------- */
+function startGame() {
+  score = 0; combo = 0; maxCombo = 0; timeAlive = 0;
+  worms = []; bullets = []; particles = []; floaters = [];
+  input = ''; inputShake = 0; comboTip = 0;
+  history = [];
+  APPLE.hp = APPLE.maxHp;
+  wave = 0;
+  syncBars();
+  nextWave();
+}
+function nextWave() {
+  wave++;
+  waveCfg = cfgForWave(wave);
+  waveTotal = waveCfg.count;
+  spawned = 0;
+  spawnTimer = 0.8;
+  state = 'playing';
+}
+function finishWave() {
+  state = 'rest';
+  restTimer = REST_SECONDS;
+  const bonus = WAVE_BONUS * wave;
+  score += bonus;
+  const before = APPLE.hp;
+  APPLE.hp = Math.min(APPLE.maxHp, APPLE.hp + APPLE.healPerWave);
+  restInfo = { bonus, healed: Math.round(APPLE.hp - before) };
+  sfx.wave();
+}
+function gameOver() {
+  state = 'over';
+  APPLE.hp = 0;
+  syncBars();
+  sfx.over();
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem('appleDefense.best', String(best)); } catch (e) {}
+  }
+  burst(APPLE.x, APPLE.y, 70, ['#E53935', '#EF5350', '#FFCDD2', '#A5D66A'], 430, 1.5, 9, 420);
+}
+
+/* ---------- 输入 ---------- */
+const muzzle = [556, 466];
+
+function pushDigit(d) {
+  const next = input + d;
+  if (next.length > 3) { input = ''; return; }
+
+  const exact = worms.find(w => !w.dead && String(w.problem.answer) === next);
+  if (exact) { recordCorrect(exact, next); fireAt(exact); input = ''; return; }
+
+  if (worms.some(w => !w.dead && String(w.problem.answer).startsWith(next))) { input = next; return; }
+
+  recordWrong(next);
+  input = '';
+  inputShake = 1;
+  combo = 0;
+  sfx.miss();
+}
+function fireAt(worm) {
+  const a = Math.atan2(worm.y - muzzle[1], worm.x - muzzle[0]);
+  bullets.push({ x: muzzle[0], y: muzzle[1], target: worm, speed: 1750, trail: [], ang: a });
+  aimAngle = a;
+  recoil = 1;
+  burst(muzzle[0], muzzle[1], 5, ['#FFE082', '#FFB300', '#FFF3E0'], 150, 0.16, 4, 60);
+  sfx.shoot();
+}
+function onHit(worm) {
+  worm.hp--;
+  worm.flash = 1;
+  burst(worm.x, worm.y, 12, ['#FFD54F', '#FFB300', '#FFFFFF', '#FF8F00'], 260, 0.42, 5.5);
+
+  if (worm.hp > 0) {                       // 没打死 → 换一道新题继续
+    worm.problem = newProblem(worm.tier, liveAnswers(worm));
+    newRecord(worm);                       // 新题 → 新记录
+    worm.pop = 1;
+    combo++;
+    sfx.hit();
+    return;
+  }
+  worm.dead = true;
+  burst(worm.x, worm.y, 26, ['#A5D66A', '#7CB342', '#FFF176', '#FFFFFF'], 340, 0.7, 7);
+  const t = TIERS[worm.tier];
+  score += t.score;
+  combo++;
+  maxCombo = Math.max(maxCombo, combo);
+
+  if (combo % COMBO_STEP === 0) {
+    score += COMBO_BONUS;
+    comboTip = 1;
+    floatText(worm.x, worm.y - 46, '+' + COMBO_BONUS + ' 连击', '#FF8F00');
+    tone(1400, 0.14, 'triangle', 0.09, 2000);
+  }
+  floatText(worm.x, worm.y - 20, '+' + t.score, '#2E7D32');
+  sfx.boom();
+}
+function chomp(worm) {
+  APPLE.hp = Math.max(0, APPLE.hp - TIERS[worm.tier].bite);
+  appleShake = 1;
+  const dx = worm.x - APPLE.x, dy = worm.y - APPLE.y, l = Math.hypot(dx, dy) || 1;
+  burst(APPLE.x + dx / l * APPLE.r * 0.9, APPLE.y + dy / l * APPLE.r * 0.9,
+        9, ['#E53935', '#EF5350', '#FFCDD2'], 190, 0.6, 6);
+  sfx.chomp();
+  if (APPLE.hp <= 0) gameOver();
+}
+
+/* ---------- 更新 ---------- */
+function update(dt) {
+  timeAlive += dt;
+  recoil = Math.max(0, recoil - dt * 6);
+  appleShake = Math.max(0, appleShake - dt * 3.2);
+  inputShake = Math.max(0, inputShake - dt * 4);
+  comboTip = Math.max(0, comboTip - dt * 1.6);
+
+  for (const w of worms) {
+    w.phase += dt * (w.chewing ? 15 : 6.5);
+    w.flash = Math.max(0, w.flash - dt * 3.5);
+    w.pop = Math.max(0, w.pop - dt * 3);
+    w.born = Math.min(1, w.born + dt * 3.5);
+
+    if (!w.chewing) {
+      w.progress += dt / waveCfg.travel;
+      if (w.progress >= 1) { w.progress = 1; w.chewing = true; w.chewTimer = APPLE.chewEvery * 0.7; }
+    } else {
+      w.chewTimer += dt;
+      if (w.chewTimer >= APPLE.chewEvery) {
+        w.chewTimer -= APPLE.chewEvery;
+        if (state !== 'over') chomp(w);
+      }
+    }
+    const p = pointAt(w.branch, w.progress);
+    const amp = w.chewing ? 1.2 : 2.2;
+    w.x = p[0] + Math.sin(w.phase * 0.5) * amp;
+    w.y = p[1] + Math.cos(w.phase * 0.5) * amp;
+    w.angle = p[2];
+  }
+  worms = worms.filter(w => !w.dead);
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.trail.push([b.x, b.y]);
+    if (b.trail.length > 9) b.trail.shift();
+    const dx = b.target.x - b.x, dy = b.target.y - 6 - b.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const step = b.speed * dt;
+    b.ang = Math.atan2(dy, dx);
+    if (dist <= step + 10) {
+      if (!b.target.dead) onHit(b.target);
+      bullets.splice(i, 1);
+    } else {
+      b.x += dx / dist * step;
+      b.y += dy / dist * step;
+    }
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const q = particles[i];
+    q.life -= dt;
+    if (q.life <= 0) { particles.splice(i, 1); continue; }
+    q.vy += q.grav * dt;
+    q.vx *= 1 - dt * 1.4;
+    q.x += q.vx * dt;
+    q.y += q.vy * dt;
+  }
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i];
+    f.life -= dt;
+    f.y -= dt * 42;
+    if (f.life <= 0) floaters.splice(i, 1);
+  }
+
+  if (bullets.length) {
+    const want = bullets[0].ang;
+    aimAngle += Math.atan2(Math.sin(want - aimAngle), Math.cos(want - aimAngle)) * Math.min(1, dt * 14);
+  } else {
+    let near = null;
+    for (const w of worms) if (!w.dead && (!near || w.progress > near.progress)) near = w;
+    const want = near ? Math.atan2(near.y - muzzle[1], near.x - muzzle[0]) : -Math.PI / 3;
+    aimAngle += Math.atan2(Math.sin(want - aimAngle), Math.cos(want - aimAngle)) * Math.min(1, dt * 5);
+  }
+
+  if (state === 'playing') {
+    spawnTimer -= dt;
+    if (spawned < waveTotal && worms.length < waveCfg.alive && spawnTimer <= 0) {
+      spawnWorm();
+      spawnTimer = waveCfg.spawn;
+    }
+    if (spawned >= waveTotal && worms.length === 0) finishWave();
+  } else if (state === 'rest') {
+    restTimer -= dt;
+    if (restTimer <= 0) nextWave();
+  }
+}
+
+/* ══════════════════════════ 渲染 ══════════════════════════ */
+
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 0, 0, 545);
+  g.addColorStop(0, '#9FD3EF');
+  g.addColorStop(0.6, '#CFEAF9');
+  g.addColorStop(1, '#EDF8FE');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, 545);
+
+  ctx.fillStyle = 'rgba(255,255,255,.72)';
+  const t = timeAlive * 11;
+  for (const c of [[120, 92, 60], [240, 120, 44], [820, 96, 56], [930, 134, 42], [520, 72, 38]]) {
+    const x = ((c[0] + t * 0.3) % (W + 260)) - 130;
+    ctx.beginPath();
+    ctx.arc(x, c[1], c[2], 0, 7);
+    ctx.arc(x + c[2] * 0.92, c[1] + 7, c[2] * 0.7, 0, 7);
+    ctx.arc(x - c[2] * 0.85, c[1] + 10, c[2] * 0.6, 0, 7);
+    ctx.fill();
+  }
+}
+
+function drawGround() {
+  const g = ctx.createLinearGradient(0, 520, 0, H);
+  g.addColorStop(0, '#9CD36A');
+  g.addColorStop(1, '#67A438');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, 542);
+  ctx.quadraticCurveTo(W / 2, 512, W, 542);
+  ctx.lineTo(W, H); ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,.30)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 542);
+  ctx.quadraticCurveTo(W / 2, 512, W, 542);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(46,102,20,.30)';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 26; i++) {
+    const x = 16 + i * 40 + Math.sin(i * 3.7) * 10;
+    const y = 566 + (i % 4) * 18;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + 5, y - 11);
+    ctx.moveTo(x + 5, y); ctx.lineTo(x + 9, y - 8);
+    ctx.stroke();
+  }
+}
+
+function drawTrunk() {
+  ctx.fillStyle = '#8D6E63';
+  ctx.beginPath();
+  ctx.moveTo(474, 570);
+  ctx.quadraticCurveTo(482, 400, 496, 250);
+  ctx.lineTo(528, 250);
+  ctx.quadraticCurveTo(542, 400, 550, 570);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(78,52,46,.45)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 5; i++) {
+    const x = 484 + i * 13;
+    ctx.beginPath();
+    ctx.moveTo(x, 560);
+    ctx.quadraticCurveTo(x + 4, 400, x + 2 + i * 2, 260);
+    ctx.stroke();
+  }
+}
+
+function drawCanopy() {
+  const blobs = [
+    [512, 168, 148], [372, 200, 118], [652, 200, 118],
+    [292, 252, 92],  [732, 252, 92],  [432, 128, 104],
+    [592, 128, 104], [512, 258, 126], [342, 152, 88], [682, 152, 88],
+    [252, 200, 72],  [772, 200, 72],
+  ];
+  ctx.fillStyle = '#66BB6A';
+  for (const b of blobs) { ctx.beginPath(); ctx.arc(b[0], b[1], b[2], 0, 7); ctx.fill(); }
+  ctx.fillStyle = '#81C784';
+  for (const b of blobs) { ctx.beginPath(); ctx.arc(b[0] - 12, b[1] - 16, b[2] * 0.78, 0, 7); ctx.fill(); }
+  ctx.fillStyle = '#A5D66A';
+  for (let i = 0; i < blobs.length; i += 2) {
+    const b = blobs[i];
+    ctx.beginPath(); ctx.arc(b[0] - 20, b[1] - 30, b[2] * 0.46, 0, 7); ctx.fill();
+  }
+}
+
+function drawBranches() {
+  ctx.lineCap = 'round';
+  for (let bi = 0; bi < PATHS.length; bi++) {
+    const pts = PATHS[bi].raw;
+    for (let i = 0; i < pts.length - 2; i += 2) {
+      const f = i / (pts.length - 1);
+      ctx.strokeStyle = f > 0.8 ? '#8D6E63' : '#7A5548';
+      ctx.lineWidth = 8 + 17 * f;
+      ctx.beginPath();
+      ctx.moveTo(pts[i][0], pts[i][1]);
+      ctx.lineTo(pts[i + 2][0], pts[i + 2][1]);
+      ctx.stroke();
+    }
+  }
+}
+
+/* 苹果画在离屏画布上：只有这样才能把"被啃掉的部分"真正挖成透明（露出后面的树） */
+const BUF = Math.ceil(APPLE.r * 1.9);              // 缓冲半径（局部坐标 −BUF ~ BUF，够装下苹果 + 梗叶）
+const bufCv = document.createElement('canvas');
+bufCv.width = bufCv.height = BUF * 4;             // 2 倍超采样 → 像素边长是局部尺寸的 4 倍
+const bufCtx = bufCv.getContext('2d');
+let bufRatio = -1;                                 // 缓冲当前画的是哪个耐久值（-1 = 还没画）
+
+/* 苹果轮廓（半径 r，局部坐标，圆心在 0,0） */
+function appleOutline(c, r) {
+  c.moveTo(0, -r);
+  c.bezierCurveTo(-r * 1.35, -r * 1.12, -r * 1.24, r * 0.92, 0, r);
+  c.bezierCurveTo(r * 1.24, r * 0.92, r * 1.35, -r * 1.12, 0, -r);
+  c.closePath();
+}
+
+/* 切割线位置表：把"啃掉多少耐久"换算成"看起来缺多少面积"，保证两者一致
+   CUT[i] = 单位圆上，被啃掉 i/(N-1) 面积时，切割线的横坐标                         */
+const CUT = (() => {
+  const t = [], N = 129;
+  for (let i = 0; i < N; i++) {
+    const target = i / (N - 1);
+    let lo = -1, hi = 1;
+    for (let k = 0; k < 40; k++) {                 // 二分：面积随切割线右移单调递减
+      const d = (lo + hi) / 2;
+      if ((Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI > target) lo = d; else hi = d;
+    }
+    t.push((lo + hi) / 2);
+  }
+  return t;
+})();
+function cutX(dmg) {
+  const p = clamp(dmg, 0, 1) * (CUT.length - 1);
+  const i = Math.floor(p);
+  return i >= CUT.length - 1 ? CUT[CUT.length - 1] : CUT[i] * (1 - (p - i)) + CUT[i + 1] * (p - i);
+}
+
+/* 咬痕：随啃掉的比例 dmg 连续变化
+   20% 起出现缺口 → 50% 约剩一半 → 90%+ 只剩一小条 → 100% 只剩苹果核
+   两道小啃痕都放在右侧：早期它们负责"被毛毛虫啃过"的观感，
+   后期被主缺口一起吞掉，不会把剩下的那点苹果再咬没。                 */
+function biteList(r, dmg) {
+  const b = [];
+  if (dmg <= 0.02) return b;
+  // 主缺口：从右侧啃。圆心随半径一起外移，切割线始终落在 cutX 处
+  // 半径给得很大 → 切割边缘接近一条直线，50% 时看起来就是"半个苹果"；
+  // 半径太小的话，圆的边界会在切割点附近向外鼓，剩下的会变成月牙而不是半颗。
+  const R = r * (4.00 + 4.00 * clamp(dmg, 0, 1));
+  b.push({ x: cutX(dmg) * r + R, y: 0.02 * r, rad: R });
+  const t1 = clamp((dmg - 0.04) / 0.22, 0, 1);
+  if (t1 > 0) b.push({ x: 0.52 * r, y: -0.60 * r, rad: r * (0.26 + 0.14 * t1) });
+  const t2 = clamp((dmg - 0.30) / 0.22, 0, 1);
+  if (t2 > 0) b.push({ x: 0.40 * r, y: 0.64 * r, rad: r * (0.22 + 0.14 * t2) });
+  return b;
+}
+
+/* 啃光后剩下的苹果核 */
+function drawCore(r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, -0.58 * r);
+  ctx.quadraticCurveTo(-0.70 * r, -0.62 * r, -0.22 * r, 0);
+  ctx.quadraticCurveTo(-0.70 * r, 0.62 * r, 0, 0.58 * r);
+  ctx.quadraticCurveTo(0.70 * r, 0.62 * r, 0.22 * r, 0);
+  ctx.quadraticCurveTo(0.70 * r, -0.62 * r, 0, -0.58 * r);
+  ctx.closePath();
+  ctx.fillStyle = '#FFF8E1';
+  ctx.fill();
+  ctx.strokeStyle = '#C9A87C';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 核里的两粒籽
+  ctx.fillStyle = '#5D4037';
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(s * 0.115 * r, 0);
+    ctx.rotate(s * 0.35);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.075 * r, 0.12 * r, 0, 0, 7);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawApple() {
+  const ratio = clamp(APPLE.hp / APPLE.maxHp, 0, 1);
+  const dmg = 1 - ratio;
+  const r = APPLE.r;
+  const sx = Math.sin(timeAlive * 46) * appleShake * 7;
+  const sy = Math.cos(timeAlive * 39) * appleShake * 5;
+  const x = APPLE.x + sx, y = APPLE.y + sy;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  if (ratio <= 0.02) {                                          // 啃光 → 只剩核
+    ctx.save();
+    ctx.translate(0, 0.42 * r - 6);                             // 把梗接到核的顶部，别浮在半空
+    drawStemLeaf(r);
+    ctx.restore();
+    drawCore(r);
+    ctx.restore();
+    return;
+  }
+
+  // 缓冲内容只跟耐久有关 → 耐久没变就别重画（手机上省一大截开销）
+  if (bufRatio !== ratio) {
+    bufRatio = ratio;
+    const c = bufCtx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    c.clearRect(0, 0, BUF * 4, BUF * 4);
+    c.setTransform(2, 0, 0, 2, BUF * 2, BUF * 2);               // 原点挪到缓冲中心，局部坐标 1:1
+    paintAppleBody(c, r, ratio, dmg);
+  }
+
+  ctx.drawImage(bufCv, -BUF, -BUF, BUF * 2, BUF * 2);   // 缓冲是 2 倍超采样，等比缩回局部尺寸
+  ctx.restore();
+}
+
+/* 往离屏缓冲里画一颗苹果（挖掉被啃掉的部分） */
+function paintAppleBody(c, r, ratio, dmg) {
+  // 果皮
+  c.beginPath();
+  appleOutline(c, r);
+  c.fillStyle = ratio > 0.55 ? '#E53935' : ratio > 0.28 ? '#D32F2F' : '#B71C1C';
+  c.fill();
+  c.strokeStyle = 'rgba(139,0,0,.35)';
+  c.lineWidth = 2;
+  c.stroke();
+
+  const bites = biteList(r, dmg);
+  if (bites.length) {
+    // 把被啃掉的部分真正挖空
+    c.globalCompositeOperation = 'destination-out';
+    c.beginPath();
+    for (const b of bites) { c.moveTo(b.x + b.rad, b.y); c.arc(b.x, b.y, b.rad, 0, 7); }
+    c.fill();
+
+    // 啃痕边缘露出一圈果肉（source-atop = 只画在还剩的苹果上）
+    c.globalCompositeOperation = 'source-atop';
+    c.save();
+    c.beginPath();
+    for (const b of bites) { c.moveTo(b.x + b.rad, b.y); c.arc(b.x, b.y, b.rad, 0, 7); }
+    c.clip();
+    c.strokeStyle = '#FFF3D1';
+    c.lineWidth = 8;
+    for (const b of bites) { c.beginPath(); c.arc(b.x, b.y, b.rad, 0, 7); c.stroke(); }
+    c.restore();
+  }
+
+  // 高光 / 暗部（同样只落在剩下的苹果上）
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = 'rgba(255,255,255,.42)';
+  c.beginPath();
+  c.ellipse(-r * 0.4, -r * 0.42, r * 0.22, r * 0.32, -0.5, 0, 7);
+  c.fill();
+  c.fillStyle = 'rgba(0,0,0,.12)';
+  c.beginPath();
+  c.ellipse(r * 0.46, r * 0.34, r * 0.2, r * 0.26, -0.4, 0, 7);
+  c.fill();
+  c.globalCompositeOperation = 'source-over';
+
+  // 梗叶最后画（免得被挖咬痕时一起啃掉），并跟着剩下那部分一起左移，别浮在半空
+  c.save();
+  c.translate(Math.min(0, cutX(dmg) * r * 0.95), 0);
+  drawStemLeaf(r, c);
+  c.restore();
+}
+
+/* 梗 + 叶 */
+function drawStemLeaf(r, c) {
+  c = c || ctx;
+  c.strokeStyle = '#6D4C41';
+  c.lineWidth = 7;
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(0, -r + 6);
+  c.quadraticCurveTo(6, -r - 18, 16, -r - 26);
+  c.stroke();
+
+  c.fillStyle = '#4CAF50';
+  c.beginPath();
+  c.ellipse(40, -r - 26, 30, 15, -0.42, 0, 7);
+  c.fill();
+  c.strokeStyle = 'rgba(27,94,32,.5)';
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(14, -r - 26); c.lineTo(66, -r - 27);
+  c.stroke();
+}
+
+function drawWorm(w) {
+  const T = TIERS[w.tier];
+  const r = 13 * T.scale;
+  const gap = r * 1.28;
+  const segs = w.tier === 2 ? 5 : 4;
+  const cos = Math.cos(w.angle), sin = Math.sin(w.angle);
+  const px = -sin, py = cos;
+  const glow = w.flash;
+
+  if (w.born < 1) {
+    ctx.save();
+    ctx.globalAlpha = w.born;
+  }
+  ctx.save();
+  ctx.translate(w.x, w.y);
+
+  // 腿
+  ctx.strokeStyle = '#33691E';
+  ctx.lineWidth = Math.max(2, r * 0.22);
+  ctx.lineCap = 'round';
+  for (let i = 0; i <= segs; i++) {
+    const d = -i * gap;
+    const sw = Math.sin(w.phase + i * 1.1) * r * 0.5;
+    const lx = -cos * d, ly = -sin * d;
+    ctx.beginPath();
+    ctx.moveTo(lx + px * r * 0.7, ly + py * r * 0.7);
+    ctx.lineTo(lx + px * (r * 0.7 + 5) + cos * sw * 0.4, ly + py * (r * 0.7 + 5) + sin * sw * 0.4);
+    ctx.moveTo(lx - px * r * 0.7, ly - py * r * 0.7);
+    ctx.lineTo(lx - px * (r * 0.7 + 5) + cos * sw * 0.4, ly - py * (r * 0.7 + 5) + sin * sw * 0.4);
+    ctx.stroke();
+  }
+
+  // 身体（从尾到头）
+  for (let i = segs; i >= 1; i--) {
+    const d = i * gap;
+    const sw = Math.sin(w.phase + i * 0.95) * r * 0.28;
+    const cx = -cos * d + px * sw, cy = -sin * d + py * sw;
+    const rr2 = r * (1 - i * 0.055);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr2, 0, 7);
+    ctx.fillStyle = i % 2 ? T.body : T.head;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(51,105,30,.5)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // 头
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.16, 0, 7);
+  ctx.fillStyle = T.head;
+  ctx.fill();
+  ctx.strokeStyle = '#33691E';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 触角
+  ctx.strokeStyle = '#33691E';
+  ctx.lineWidth = Math.max(2, r * 0.16);
+  for (const s of [-1, 1]) {
+    const ax = px * r * 0.62 * s + cos * r * 0.55;
+    const ay = py * r * 0.62 * s + sin * r * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(ax * 0.6, ay * 0.6);
+    ctx.quadraticCurveTo(ax * 1.5, ay * 1.5, ax * 1.55 + cos * r * 0.5, ay * 1.55 + sin * r * 0.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ax * 1.55 + cos * r * 0.5, ay * 1.55 + sin * r * 0.5, r * 0.19, 0, 7);
+    ctx.fillStyle = '#33691E';
+    ctx.fill();
+  }
+
+  // 眼睛（朝行进方向）
+  const ex = cos * r * 0.34, ey = sin * r * 0.34;
+  for (const s of [-1, 1]) {
+    const bx = ex + px * r * 0.42 * s, by = ey + py * r * 0.42 * s;
+    ctx.beginPath();
+    ctx.arc(bx, by, r * 0.31, 0, 7);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bx + cos * r * 0.13, by + sin * r * 0.13, r * 0.16, 0, 7);
+    ctx.fillStyle = '#1B2A0E';
+    ctx.fill();
+  }
+
+  if (glow > 0) {
+    ctx.globalAlpha = glow * 0.85;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.16, 0, 7);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+  if (w.born < 1) ctx.restore();
+
+  drawBubble(w);
+}
+
+function drawBubble(w) {
+  const T = TIERS[w.tier];
+  const off = 30 * T.scale + 34;
+  const text = w.problem.text;
+
+  ctx.font = 'bold 27px ' + FONT;
+  const tw = ctx.measureText(text).width;
+  const bw = tw + 42, bh = 48;
+
+  // 默认挂在虫子正上方
+  let cx = w.x, cy = w.y - off;
+  // 压到大苹果就沿径向推出去，保证题目永远看得见、苹果也永远看得见
+  const dx = cx - APPLE.x, dy = cy - APPLE.y;
+  const l = Math.hypot(dx, dy) || 1;
+  const need = APPLE.r + 96;
+  if (l < need) { cx = APPLE.x + dx / l * need; cy = APPLE.y + dy / l * need; }
+  // 别跑出画面
+  cx = clamp(cx, bw / 2 + 16, W - bw / 2 - 16);
+  cy = clamp(cy, bh + 34, H - 40);
+  const shifted = Math.abs(cx - w.x) > 6 || Math.abs(cy - (w.y - off)) > 6;
+
+  if (shifted) {
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = 'rgba(46,125,50,.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(w.x, w.y - 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const scale = 0.9 + 0.1 * w.born + w.pop * 0.12;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  const x = -bw / 2, y = -bh;
+
+  ctx.fillStyle = 'rgba(0,0,0,.13)';
+  rr(ctx, x + 3, y + 4, bw, bh, 15); ctx.fill();
+
+  ctx.fillStyle = '#FFFFFF';
+  rr(ctx, x, y, bw, bh, 15); ctx.fill();
+  ctx.strokeStyle = w.flash > 0 ? '#FF6F00' : '#7CB342';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(-11, y + bh - 1);
+  ctx.lineTo(11, y + bh - 1);
+  ctx.lineTo(0, y + bh + 13);
+  ctx.closePath();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.strokeStyle = w.flash > 0 ? '#FF6F00' : '#7CB342';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.moveTo(-9, y + bh - 3);
+  ctx.lineTo(9, y + bh - 3);
+  ctx.lineTo(0, y + bh - 2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = w.flash > 0 ? '#E65100' : '#263238';
+  ctx.font = 'bold 27px ' + FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, y + bh / 2 + 1);
+
+  // 血量点：还要打几枪
+  if (w.maxHp > 1) {
+    const dw = 11, gapd = 6;
+    let dx2 = -(w.maxHp * dw + (w.maxHp - 1) * gapd) / 2;
+    for (let i = 0; i < w.maxHp; i++) {
+      ctx.beginPath();
+      ctx.arc(dx2 + dw / 2, y - 13, 4.5, 0, 7);
+      ctx.fillStyle = i < w.hp ? '#E53935' : '#CFD8DC';
+      ctx.fill();
+      dx2 += dw + gapd;
+    }
+  }
+  ctx.restore();
+}
+
+function drawShooter() {
+  const x = 512, feet = 596;
+  const bob = Math.sin(timeAlive * 6) * 2;
+
+  ctx.save();
+  ctx.translate(x, feet + bob);
+
+  ctx.fillStyle = 'rgba(0,0,0,.16)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 42, 10, 0, 0, 7);
+  ctx.fill();
+
+  // 腿
+  ctx.strokeStyle = '#37474F';
+  ctx.lineWidth = 13;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-9, -34); ctx.lineTo(-14, -2);
+  ctx.moveTo(9, -34);  ctx.lineTo(16, -2);
+  ctx.stroke();
+
+  // 身体
+  ctx.fillStyle = '#42A5F5';
+  rr(ctx, -24, -84, 48, 54, 16);
+  ctx.fill();
+  ctx.strokeStyle = '#1565C0';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 手臂 + 枪
+  const sx = 8, sy = -70;
+  const reach = recoil * 9;
+  const hx = sx + Math.cos(aimAngle) * (48 - reach);
+  const hy = sy + Math.sin(aimAngle) * (48 - reach);
+
+  ctx.strokeStyle = '#F5C99B';
+  ctx.lineWidth = 13;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(hx, hy);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.rotate(aimAngle);
+  ctx.fillStyle = '#455A64';
+  rr(ctx, -10, -8, 46, 16, 5); ctx.fill();
+  ctx.fillStyle = '#263238';
+  rr(ctx, 30, -5, 22, 10, 3); ctx.fill();
+  ctx.fillStyle = '#37474F';
+  rr(ctx, -4, 6, 14, 16, 4); ctx.fill();
+  ctx.restore();
+
+  // 手
+  ctx.beginPath();
+  ctx.arc(hx, hy, 7.5, 0, 7);
+  ctx.fillStyle = '#F5C99B';
+  ctx.fill();
+
+  // 头
+  ctx.beginPath();
+  ctx.arc(0, -104, 27, 0, 7);
+  ctx.fillStyle = '#F5C99B';
+  ctx.fill();
+  ctx.strokeStyle = '#D9A66F';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 头发
+  ctx.fillStyle = '#3E2723';
+  ctx.beginPath();
+  ctx.arc(0, -110, 27, Math.PI * 1.03, Math.PI * 1.97);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(-16, -116, 10, 0, 7);
+  ctx.fill();
+
+  // 眼睛
+  ctx.fillStyle = '#1B2A0E';
+  ctx.beginPath();
+  ctx.arc(-9, -106, 3.2, 0, 7);
+  ctx.arc(9, -106, 3.2, 0, 7);
+  ctx.fill();
+
+  // 嘴
+  ctx.strokeStyle = '#8D4E2A';
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.arc(0, -99, 7, 0.25 * Math.PI, 0.75 * Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+
+  muzzle[0] = x + hx + Math.cos(aimAngle) * 48;
+  muzzle[1] = feet + bob + hy + Math.sin(aimAngle) * 48;
+}
+
+function drawBullets() {
+  for (const b of bullets) {
+    for (let i = 0; i < b.trail.length; i++) {
+      const f = (i + 1) / b.trail.length;
+      ctx.beginPath();
+      ctx.arc(b.trail[i][0], b.trail[i][1], 3 + 5 * f, 0, 7);
+      ctx.fillStyle = 'rgba(255,193,7,' + (f * 0.55) + ')';
+      ctx.fill();
+    }
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 20);
+    g.addColorStop(0, 'rgba(255,255,255,.95)');
+    g.addColorStop(0.4, 'rgba(255,213,79,.85)');
+    g.addColorStop(1, 'rgba(255,152,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 20, 0, 7);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.ang);
+    ctx.fillStyle = '#FFF8E1';
+    ctx.beginPath();
+    ctx.moveTo(11, 0); ctx.lineTo(-5, 6); ctx.lineTo(-5, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawParticles() {
+  for (const q of particles) {
+    ctx.globalAlpha = clamp(q.life / q.max, 0, 1);
+    ctx.fillStyle = q.color;
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, q.size, 0, 7);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  for (const f of floaters) {
+    ctx.globalAlpha = clamp(f.life / f.max, 0, 1);
+    ctx.fillStyle = f.color;
+    ctx.font = 'bold 26px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth = 4;
+    ctx.strokeText(f.text, f.x, f.y);
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // 左：分数 / 波次 / 连击
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(255,255,255,.62)';
+  rr(ctx, 28, 20, 268, 96, 18);
+  ctx.fill();
+
+  ctx.fillStyle = '#37474F';
+  ctx.font = 'bold 15px ' + FONT;
+  ctx.fillText('得分', 46, 46);
+
+  ctx.font = 'bold 34px ' + FONT;
+  ctx.fillStyle = '#E65100';
+  ctx.fillText(String(score), 46, 88);
+
+  ctx.font = 'bold 16px ' + FONT;
+  ctx.fillStyle = '#37474F';
+  ctx.fillText('第 ' + wave + ' 波', 196, 48);
+
+  ctx.font = 'bold 17px ' + FONT;
+  ctx.fillStyle = combo >= 2 ? (comboTip > 0 ? '#FF6F00' : '#558B2F') : '#90A4AE';
+  ctx.fillText('连对 ' + combo, 196, 82);
+
+  // 右：苹果耐久
+  const bw = 260, bx = W - 28 - bw, by = 34;
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  rr(ctx, bx - 16, by - 16, bw + 32, 62, 18);
+  ctx.fill();
+
+  ctx.font = 'bold 17px ' + FONT;
+  ctx.fillStyle = '#37474F';
+  ctx.textAlign = 'left';
+  ctx.fillText('苹果耐久', bx, by + 2);
+
+  const ratio = clamp(APPLE.hp / APPLE.maxHp, 0, 1);
+  rr(ctx, bx, by + 12, bw, 20, 10);
+  ctx.fillStyle = 'rgba(0,0,0,.10)';
+  ctx.fill();
+  if (ratio > 0) {
+    rr(ctx, bx, by + 12, Math.max(10, bw * ratio), 20, 10);
+    ctx.fillStyle = ratio > 0.55 ? '#E53935' : ratio > 0.28 ? '#F4511E' : '#B71C1C';
+    ctx.fill();
+  }
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 15px ' + FONT;
+  ctx.fillStyle = '#455A64';
+  ctx.fillText(Math.ceil(APPLE.hp) + ' / ' + APPLE.maxHp, bx + bw, by + 2);
+
+  // 中：输入回显
+  const shake = inputShake > 0 ? Math.sin(inputShake * 50) * inputShake * 7 : 0;
+  ctx.save();
+  ctx.translate(W / 2 + shake, 0);
+  const label = input === '' ? (PAD_ON ? '看题目 · 点数字' : '看题目 · 敲答案') : input;
+  ctx.font = 'bold 44px ' + FONT;
+  const tw = Math.max(200, ctx.measureText(label).width + 70);
+
+  ctx.fillStyle = input === '' ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.88)';
+  rr(ctx, -tw / 2, 24, tw, 62, 20);
+  ctx.fill();
+  ctx.strokeStyle = inputShake > 0 ? '#E53935' : (input === '' ? 'rgba(120,144,156,.5)' : '#43A047');
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = input === '' ? '#78909C' : '#1B5E20';
+  ctx.font = input === '' ? 'bold 22px ' + FONT : 'bold 44px ' + FONT;
+  ctx.fillText(label, 0, 56);
+  ctx.restore();
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawPanel(x, y, w, h) {
+  ctx.fillStyle = 'rgba(18,32,44,.72)';
+  rr(ctx, x, y, w, h, 26);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.16)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function drawMenu() {
+  ctx.fillStyle = 'rgba(8,26,40,.3)';
+  ctx.fillRect(0, 0, W, H);
+
+  const pw = 640, ph = 400, px = (W - pw) / 2, py = 110;
+  drawPanel(px, py, pw, ph);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = 'bold 52px ' + FONT;
+  ctx.fillStyle = '#FFD54F';
+  ctx.fillText('🍎 苹果保卫战', W / 2, py + 76);
+
+  ctx.font = 'bold 21px ' + FONT;
+  ctx.fillStyle = '#B3E5FC';
+  ctx.fillText('看毛毛虫头顶的题目，敲出答案，小枪手就会开枪', W / 2, py + 138);
+
+  ctx.font = '19px ' + FONT;
+  ctx.fillStyle = '#ECEFF1';
+  ctx.fillText('小虫 1 枪 · 20 以内加减     中虫 2 枪 · 100 以内加减     大虫 3 枪 · 九九乘法',
+               W / 2, py + 186);
+  ctx.fillText('答对得按难度计分，连对 5 题额外奖励。打错不扣分，重新输入即可。', W / 2, py + 222);
+  ctx.fillText('放跑毛毛虫，它就会啃苹果 —— 苹果啃完，保卫失败。', W / 2, py + 258);
+
+  const pulse = 0.6 + 0.4 * Math.sin(timeAlive * 4);
+  ctx.globalAlpha = pulse;
+  ctx.font = 'bold 28px ' + FONT;
+  ctx.fillStyle = '#A5D66A';
+  ctx.fillText(PAD_ON ? '点屏幕 或 点下面的数字 开始' : '按 Enter 或空格开始', W / 2, py + 336);
+  ctx.globalAlpha = 1;
+
+  if (best > 0) {
+    ctx.font = 'bold 18px ' + FONT;
+    ctx.fillStyle = '#FFE082';
+    ctx.fillText('最高分  ' + best, W / 2, py + 378);
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawRest() {
+  const pw = 560, ph = 220, px = (W - pw) / 2, py = 190;
+  drawPanel(px, py, pw, ph);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 40px ' + FONT;
+  ctx.fillStyle = '#A5D66A';
+  ctx.fillText('第 ' + wave + ' 波 · 守卫成功', W / 2, py + 62);
+
+  ctx.font = 'bold 21px ' + FONT;
+  ctx.fillStyle = '#FFE082';
+  ctx.fillText('过关奖励 +' + restInfo.bonus + '    苹果恢复 +' + restInfo.healed, W / 2, py + 114);
+
+  ctx.font = 'bold 22px ' + FONT;
+  ctx.fillStyle = '#B3E5FC';
+  ctx.fillText('准备下一波…  ' + Math.ceil(Math.max(0, restTimer)), W / 2, py + 166);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawOver() {
+  ctx.fillStyle = 'rgba(8,26,40,.55)';
+  ctx.fillRect(0, 0, W, H);
+
+  const pw = 600, ph = 372, px = (W - pw) / 2, py = 130;
+  drawPanel(px, py, pw, ph);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 46px ' + FONT;
+  ctx.fillStyle = '#EF5350';
+  ctx.fillText('苹果被啃光了…', W / 2, py + 72);
+
+  ctx.font = 'bold 24px ' + FONT;
+  ctx.fillStyle = '#ECEFF1';
+  ctx.fillText('坚持到第 ' + wave + ' 波', W / 2, py + 138);
+
+  ctx.font = 'bold 54px ' + FONT;
+  ctx.fillStyle = '#FFD54F';
+  ctx.fillText(String(score), W / 2, py + 202);
+  ctx.font = '17px ' + FONT;
+  ctx.fillStyle = '#B0BEC5';
+  ctx.fillText('本次得分', W / 2, py + 240);
+
+  ctx.font = 'bold 19px ' + FONT;
+  ctx.fillStyle = '#B3E5FC';
+  ctx.fillText('最高连对 ' + maxCombo + '    历史最高分 ' + best, W / 2, py + 278);
+
+  const pulse = 0.6 + 0.4 * Math.sin(timeAlive * 4);
+  ctx.globalAlpha = pulse;
+  ctx.font = 'bold 24px ' + FONT;
+  ctx.fillStyle = '#A5D66A';
+  ctx.fillText(PAD_ON ? '点下面的按钮 看记录 或 再来一局'
+                      : '按 R 查看答题记录　按 Enter 再来一局', W / 2, py + 330);
+  ctx.globalAlpha = 1;
+  ctx.textBaseline = 'alphabetic';
+}
+
+/* ---------- 结算后的答题记录面板 ---------- */
+let reviewOpen = false, reviewFilter = 'all';
+
+function syncBars() {
+  const over = state === 'over';
+  actionsEl.classList.toggle('hidden', !over);
+  padEl.style.display = (PAD_ON && !over) ? '' : 'none';
+  if (!over) closeReview();
+  resize();                       // 底部条换了，画面要重新适配
+}
+
+function openReview() {
+  if (!history.length) return;
+  reviewOpen = true;
+  revEl.classList.remove('hidden');
+  renderReview();
+}
+function closeReview() {
+  reviewOpen = false;
+  revEl.classList.add('hidden');
+}
+
+function renderReview() {
+  const right = history.filter(r => r.ok === true).length;
+  const wrong = history.filter(r => r.ok === false).length;
+  const unanswered = history.filter(r => r.ok === null).length;
+  const done = right + wrong;
+  const pct = done ? Math.round(right / done * 100) : 0;
+  const timed = history.filter(r => r.time > 0);
+  const avg = timed.length ? (timed.reduce((s, r) => s + r.time, 0) / timed.length).toFixed(1) : '—';
+
+  document.getElementById('revStat').innerHTML =
+      '共 <b>' + history.length + '</b> 题'
+    + '　答对 <b class="okc">' + right + '</b>'
+    + '　答错 <b class="noc">' + wrong + '</b>'
+    + '　没答 <b>' + unanswered + '</b>'
+    + '　正确率 <b>' + pct + '%</b>'
+    + '　平均用时 <b>' + avg + ' 秒</b>';
+
+  document.querySelector('#rev .tabs button[data-f="wrong"]').textContent =
+    '只看错题（' + history.filter(r => r.wrong.length).length + '）';
+
+  const rows = history.map((r, i) => ({ r, n: i + 1 }))
+                      .filter(({ r }) => reviewFilter === 'all' || r.wrong.length);
+  if (!rows.length) {
+    document.getElementById('revList').innerHTML =
+      '<div class="empty">' + (reviewFilter === 'wrong' ? '太棒了，一题都没做错 🎉' : '还没有题目') + '</div>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>#</th><th>题目</th><th>作答</th><th>结果</th><th>用时</th></tr></thead><tbody>';
+  for (const { r, n } of rows) {
+    let given, result, cls = '';
+    const ws = r.wrong.filter((v, i) => i === 0 || v !== r.wrong[i - 1]);   // 连按同一个错串只记一次
+    if (r.ok === true) {
+      given = ws.length ? ws.join('、') + ' ✘ → ' + r.answer : r.answer;
+      result = ws.length ? '<span class="fix">第 ' + r.tries + ' 次答对</span>' : '<span class="ok">✔</span>';
+      if (ws.length) cls = 'bad';
+    } else if (r.ok === false) {
+      given = ws.join('、');
+      result = '<span class="no">✘</span>';
+      cls = 'bad';
+    } else {
+      given = '<span class="na">—</span>';
+      result = '<span class="na">没答</span>';
+      cls = 'miss';
+    }
+    html += '<tr class="' + cls + '">'
+          + '<td>' + n + '</td>'
+          + '<td class="q">' + r.text + '</td>'
+          + '<td>' + given + '</td>'
+          + '<td>' + result + '</td>'
+          + '<td>' + (r.time ? r.time.toFixed(1) + 's' : '<span class="na">—</span>') + '</td>'
+          + '</tr>';
+  }
+  document.getElementById('revList').innerHTML = html + '</tbody></table>';
+}
+
+/* 把记录复制成纯文本（字段间用 Tab，可直接粘进 Excel） */
+function copyReview() {
+  const lines = ['序号\t题目\t你的答案\t正确答案\t结果\t用时(秒)'];
+  history.forEach((r, i) => {
+    const ws = r.wrong.filter((v, k) => k === 0 || v !== r.wrong[k - 1]);
+    lines.push([
+      i + 1,
+      r.text,
+      r.ok === true ? (ws.length ? ws.join(' ') + ' → ' + r.answer : r.answer) : (ws.join(' ') || '—'),
+      r.answer,
+      r.ok === true ? (ws.length ? '第' + r.tries + '次答对' : '正确') : (r.ok === false ? '答错' : '没答'),
+      r.time ? r.time.toFixed(1) : '',
+    ].join('\t'));
+  });
+  const text = lines.join('\n');
+
+  const done = ok => {
+    const btn = document.getElementById('revCopy');
+    btn.textContent = ok ? '已复制' : '复制失败';
+    setTimeout(() => { btn.textContent = '复制'; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(fallbackCopy(text)));
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+document.getElementById('revCopy').onclick = copyReview;
+document.getElementById('revClose').onclick = closeReview;
+document.getElementById('revBack').onclick = closeReview;
+document.getElementById('revAgain').onclick = () => { closeReview(); startGame(); };
+document.getElementById('btnReview').onclick = openReview;
+document.getElementById('btnAgain').onclick = startGame;
+actionsEl.addEventListener('pointerdown', e => e.stopPropagation());
+revEl.addEventListener('pointerdown', e => { if (e.target === revEl) closeReview(); });
+for (const btn of document.querySelectorAll('#rev .tabs button')) {
+  btn.onclick = () => {
+    reviewFilter = btn.dataset.f;
+    for (const b of document.querySelectorAll('#rev .tabs button')) b.classList.toggle('on', b === btn);
+    renderReview();
+  };
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawGround();
+  drawTrunk();
+  drawBranches();
+  drawCanopy();
+  drawApple();
+  for (const w of worms) drawWorm(w);
+  drawShooter();
+  drawBullets();
+  drawParticles();
+  if (state === 'menu') drawMenu();
+  else { drawHUD(); if (state === 'rest') drawRest(); if (state === 'over') drawOver(); }
+}
+
+/* ---------- 主循环 ---------- */
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  if (!reviewOpen) render();      // 看记录时画面停住，不必每帧重绘
+  requestAnimationFrame(loop);
+}
+
+/* ---------- 键盘 ---------- */
+window.addEventListener('keydown', e => {
+  if (reviewOpen) {                                   // 记录面板打开时，只响应关闭
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ' || e.key === 'r' || e.key === 'R') {
+      closeReview();
+      e.preventDefault();
+    }
+    return;
+  }
+  if ((e.key === 'r' || e.key === 'R') && state === 'over') { openReview(); e.preventDefault(); return; }
+  if (e.key === 'Enter' || e.key === ' ') {
+    if (state === 'menu' || state === 'over') {
+      audio();
+      startGame();
+      e.preventDefault();
+    }
+    return;
+  }
+  if (state !== 'playing' && state !== 'rest') return;
+  if (e.key >= '0' && e.key <= '9') { pushDigit(e.key); e.preventDefault(); }
+  else if (e.key === 'Backspace') { input = input.slice(0, -1); e.preventDefault(); }
+});
+window.addEventListener('pointerdown', () => {
+  if (reviewOpen) return;
+  audio();
+  if (state === 'menu' || state === 'over') startGame();
+});
+
+/* ---------- 屏幕数字键盘（手机 / 触屏） ---------- */
+padEl.addEventListener('pointerdown', e => {
+  if (reviewOpen) return;
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  e.preventDefault();
+  audio();
+  if (state === 'menu' || state === 'over') { startGame(); return; }   // 手机上没有 Enter，点数字即开局
+  if (state !== 'playing' && state !== 'rest') return;
+  const k = btn.dataset.k;
+  if (k === 'del') { input = input.slice(0, -1); sfx.click(); }
+  else { pushDigit(k); sfx.click(); }
+});
+
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
